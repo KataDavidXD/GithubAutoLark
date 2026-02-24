@@ -1,0 +1,86 @@
+# Agent Run - 2026-02-10T19:16:13.487074
+# Output is REDACTED for security
+
+============================================================
+LANGGRAPH SYNC AGENT
+============================================================
+Direction: bidirectional
+Input folder: E:\GithubAutoLark\input
+
+This agent parses fuzzy markdown docs using LLM and syncs to GitHub/Lark.
+
+
+----------------------------------------
+Agent Messages:
+----------------------------------------
+  Loading input markdown files...
+  Loaded project doc: example_project_structure.md
+  Loaded team doc: example_team.md
+  Loaded todos doc: example_todos.md
+  Loaded config.yaml
+  Parsing documents with LLM...
+  LLM extracted 1 member(s) and 6 todo(s)
+  Project: GithubAutoLark
+  Loading existing data from GitHub, Lark, and SQLite...
+  Found 8 GitHub issue(s)
+  Found 5 Lark record(s)
+  Found 4 local task(s)
+  Mode determined: existing
+  Standardizing member identities...
+  Standardized 1 member(s)
+  Aligning todos with existing data...
+  Created task: 98692d24...
+  Created task: d732b59f...
+  Matched 'Add unit tests for sync engine...' to GitHub #7
+  Matched 'Add unit tests for sync engine...' to Lark recvaOqHTayR...
+  Created task: 2797b1f2...
+  Created task: edf38283...
+  Matched 'Improve error messages...' to GitHub #8
+  Matched 'Improve error messages...' to Lark recvaOqIaJLO...
+  Aligned 6 todo(s)
+  Syncing Lark -> GitHub...
+  Created GitHub issue #9
+  Created GitHub issue #10
+  Updated GitHub issue #7
+  Created GitHub issue #11
+  Created GitHub issue #12
+  Updated GitHub issue #8
+  Synced 6 issue(s) to GitHub
+  Syncing GitHub -> Lark...
+  Created Lark record for task 98692d24
+  Created Lark record for task d732b59f
+  Updated Lark record for task af50caf2
+  Created Lark record for task 2797b1f2
+  Created Lark record for task edf38283
+  Updated Lark record for task ec6a853a
+  Synced 6 record(s) to Lark
+  ========================================
+  SYNC COMPLETE
+  ========================================
+  GitHub issues synced: 6
+  Lark records synced: 6
+  Errors: 0
+
+----------------------------------------
+Results Summary:
+----------------------------------------
+
+Standardized Members (1):
+  - [REDACTED_EMAIL]: GitHub=KataDavidXD, Lark=ou_[REDACTED]...
+
+Aligned Todos (6):
+  - Implement OAuth2 support... -> GH: N/A, Lark: N/A
+  - Improve error handling in sync engine... -> GH: N/A, Lark: N/A
+  - Add unit tests for sync engine... -> GH: #7, Lark: recvaOqHTayR...
+  - Update documentation... -> GH: N/A, Lark: N/A
+  - Consider adding webhook support... -> GH: N/A, Lark: N/A
+  - Improve error messages... -> GH: #8, Lark: recvaOqIaJLO...
+
+Sync Results:
+  GitHub: 6 synced
+  Lark: 6 synced
+  Errors: 0
+
+============================================================
+AGENT RUN COMPLETE
+============================================================

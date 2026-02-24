@@ -1,0 +1,16 @@
+export GITHUB_TOKEN="GITHUB_TOKEN" IN .ENV 
+export OWNER="xxx"
+export REPO="yyy"
+
+https://github.com/KataDavidXD/GithubAutoLark.git
+
+curl -s -X POST \
+  -H "Authorization: Bearer $GITHUB_TOKEN" \
+  -H "Accept: application/vnd.github+json" \
+  https://api.github.com/repos/$OWNER/$REPO/issues \
+  -d '{
+    "title":"[AUTO] WTB nightly failure",
+    "body":"Detected failure in CI run ...\nLogs: ...",
+    "labels":["bug","auto"],
+    "assignees":["github-username"]
+  }'

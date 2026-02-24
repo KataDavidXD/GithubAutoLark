@@ -1,0 +1,66 @@
+# Lark Lifecycle Demo - 2026-02-10T14:30:43.785684
+# Output is REDACTED for security
+
+============================================================
+LARK LIFECYCLE DEMO
+============================================================
+App Token: GArxbcsdgasE0csyzCJjKQjGpYg
+Table ID: tblL8fBTAzeFsQmn
+Employee Email: [REDACTED_EMAIL]
+
+----------------------------------------
+Step 1: List Tables
+----------------------------------------
+Found 2 table(s):
+  - Table (id: tblve4M5yEgaMIXV)
+  - Tasks (id: tblL8fBTAzeFsQmn)
+
+----------------------------------------
+Step 2: List Fields in Tasks Table
+----------------------------------------
+Found 5 field(s):
+  - Task Name (type=1, id=fldh3gtztR)
+  - Status (type=3, id=fldJjpY9Ts)
+  - Assignee (type=11, id=fldFioOjZ3)
+  - GitHub Issue (type=2, id=fldCAmyro5)
+  - Last Sync (type=5, id=fldDVryA7h)
+
+----------------------------------------
+Step 3: Create Task Record
+----------------------------------------
+Creating task: [DEMO] Lifecycle Test 20260210_143032
+Created record_id: recvaNPRZmFFVh
+Fields: {'Status': 'To Do', 'Task Name': '[DEMO] Lifecycle Test 20260210_143032'}
+
+----------------------------------------
+Step 4: Resolve Assignee Email -> open_id
+----------------------------------------
+Looking up: [REDACTED_EMAIL]
+Resolved open_id: ou_[REDACTED]
+
+----------------------------------------
+Step 5: Assign Member to Task
+----------------------------------------
+Updated record with assignee
+Result: {'Assignee': [{'id': 'ou_[REDACTED]'}]}
+
+----------------------------------------
+Step 6: Update Task Status
+----------------------------------------
+Updated status to: In Progress
+Result: {'Status': 'In Progress'}
+Updated status to: Done
+Result: {'Status': 'Done'}
+
+----------------------------------------
+Step 7: Search & Verify Record
+----------------------------------------
+Total records in table: 1
+
+Found our record:
+  record_id: recvaNPRZmFFVh
+  fields: {'Assignee': [{'avatar_url': 'https://s16-imfile-sg.feishucdn.com/static-resource/v1/v3_00qn_d27ee818-718b-4b2d-990f-71c671e056ix~?image_size=72x72&cut_type=default-face&quality=&format=jpeg&sticker_format=.webp', 'email': '[REDACTED_EMAIL]', 'en_name': 'Yang Li', 'id': 'ou_[REDACTED]', 'name': 'Yang Li'}], 'Status': 'Done', 'Task Name': [{'text': '[DEMO] Lifecycle Test 20260210_143032', 'type': 'text'}]}
+
+============================================================
+LARK LIFECYCLE DEMO COMPLETE
+============================================================

@@ -1,0 +1,84 @@
+# Sync Demo - 2026-02-10T14:34:06.452549
+# Output is REDACTED for security
+
+============================================================
+BIDIRECTIONAL SYNC DEMO
+============================================================
+Lark App Token: GArxbcsdgasE0csyzCJjKQjGpYg
+Lark Table ID: tblL8fBTAzeFsQmn
+Employee Email: [REDACTED_EMAIL]
+
+----------------------------------------
+Step 1: Create Task Locally & Queue Sync
+----------------------------------------
+Created task: 3465ef19-5574-416b-b229-e4329530b24f
+  Title: [SYNC_DEMO] Test 20260210_143346
+  Status: ToDo
+  Assignee: [REDACTED_EMAIL]
+
+Outbox has 2 pending event(s):
+  - sync_github
+  - sync_lark
+
+----------------------------------------
+Step 2: Process Outbox - Sync to GitHub
+----------------------------------------
+Processed 1 event(s)
+GitHub Issue Created: #5
+
+----------------------------------------
+Step 3: Process Outbox - Sync to Lark
+----------------------------------------
+Processed 1 event(s)
+Lark Record Created: recvaNQHeHDyo7
+
+----------------------------------------
+Step 4: Lark Status Change -> Update GitHub
+----------------------------------------
+Updating Lark record status to 'Done'...
+Lark record updated.
+
+Checking for Lark changes...
+Detected 1 change(s):
+  - Task 3465ef19...: To Do -> Done
+
+Processing GitHub status update...
+Processed 1 event(s)
+GitHub Issue #5 state: closed
+
+----------------------------------------
+Step 5: GitHub Status Change -> Update Lark
+----------------------------------------
+Reopening GitHub issue...
+GitHub issue reopened.
+
+Checking for GitHub changes...
+Detected 1 change(s):
+  - Task 3465ef19...: Done -> To Do
+
+Processing Lark status update...
+Processed 1 event(s)
+Lark Record status: To Do
+
+----------------------------------------
+Step 6: Cleanup - Close GitHub Issue
+----------------------------------------
+Closed GitHub Issue #5
+
+============================================================
+BIDIRECTIONAL SYNC DEMO COMPLETE
+============================================================
+
+Summary:
+  Task ID: 3465ef19-5574-416b-b229-e4329530b24f
+  GitHub Issue: #5
+  Lark Record: recvaNQHeHDyo7
+
+Sync Log (last 10 entries):
+  [success] outbound lark_status: Status -> To Do
+  [detected] inbound github: Status change: Done -> To Do
+  [success] outbound github_status: Status -> closed
+  [detected] inbound lark: Status change: To Do -> Done
+  [success] outbound lark: Synced to Lark
+  [success] outbound github: Synced to GitHub
+  [pending] outbound task: Task created, sync queued

@@ -1,0 +1,23 @@
+# Optional configuration overrides
+# If not provided, defaults from .env are used
+
+github:
+  owner: KataDavidXD
+  repo: GithubAutoLark
+  default_labels:
+    - auto
+    - sync
+
+lark:
+  # These come from .env if not specified here
+  # app_token: xxx
+  # table_id: xxx
+  fields:
+    title: Task Name
+    status: Status
+    assignee: Assignee
+    github_issue: GitHub Issue
+    last_sync: Last Sync
+
+sync:
+  direction: bidirectional  # github_to_lark, lark_to_github, bidirectional
