@@ -1,12 +1,14 @@
 # Core dependencies
-requests>=2.28.0
+requests>=2.31.0
 python-dotenv>=1.0.0
 pyyaml>=6.0.0
 
-# LangGraph agent
+# LangGraph agent (supervisor pattern)
 langgraph>=0.2.0
 langchain-core>=0.3.0
 
-# Optional: For LLM integration
+# Optional: LLM-based command parsing (future)
 langchain-openai>=0.2.0
-# openai>=1.0.0
+
+# Testing
+pytest>=8.0.0

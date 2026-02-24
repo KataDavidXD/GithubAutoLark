@@ -1,227 +1,112 @@
-"""
-LangGraph Agent - Workflow graph for GitHub-Lark sync.
+"""LangGraph workflow — Supervisor pattern with sub-agent routing.
 
-This module defines the agent graph with nodes for:
-1. Loading input files (project, members, todos)
-2. Loading existing data (GitHub issues, Lark records, SQLite tasks)
-3. Standardizing members across platforms
-4. Aligning todos with existing data
-5. Bidirectional sync (GitHub <-> Lark)
+This is the main graph that processes user commands:
+  parse_command → route_by_intent → sub-agent → format_response → END
 """
 
 from __future__ import annotations
 
+from functools import partial
 from typing import Any, Literal
 
 from langgraph.graph import StateGraph, END
 
 from src.agent.state import AgentState
-from src.agent.nodes import (
-    load_input_files,
-    parse_with_llm,
-    load_existing_data,
-    standardize_members,
-    align_todos,
-    sync_github_to_lark,
-    sync_lark_to_github,
-    finalize,
+from src.agent.supervisor import (
+    parse_command,
+    route_by_intent,
+    ask_clarification,
+    format_response,
 )
+from src.agent.member_agent import member_agent_node
+from src.agent.github_agent import github_agent_node
+from src.agent.lark_agent import lark_agent_node
+from src.agent.sync_agent import sync_agent_node
+from src.agent.tools.member_tools import MemberTools
+from src.agent.tools.github_tools import GitHubTools
+from src.agent.tools.lark_tools import LarkTools
+from src.agent.tools.sync_tools import SyncTools
+from src.db.database import Database
 
 
-def create_sync_agent() -> StateGraph:
+def build_graph(
+    db: Database,
+    github_service: Any = None,
+    lark_service: Any = None,
+) -> StateGraph:
     """
-    Create the LangGraph agent for GitHub-Lark sync.
-    
-    Graph structure:
-    
-    ┌─────────────────┐
-    │ load_input_files │  <- Load markdown docs from input/
-    └────────┬────────┘
-             │
-    ┌────────▼────────┐
-    │  parse_with_llm  │  <- LLM extracts structured todos from fuzzy docs
-    └────────┬────────┘
-             │
-    ┌────────▼────────┐
-    │load_existing_data│  <- Load existing GitHub/Lark/SQLite data
-    └────────┬────────┘
-             │
-    ┌────────▼────────┐
-    │standardize_members│  <- Resolve email -> Lark open_id
-    └────────┬────────┘
-             │
-    ┌────────▼────────┐
-    │   align_todos    │  <- Match todos with existing issues/records
-    └────────┬────────┘
-             │
-    ┌────────▼────────┐
-    │ decide_direction │ ─── Router (github_to_lark / lark_to_github / bidirectional)
-    └────────┬────────┘
-             │
-     ┌───────┴───────┐
-     ▼               ▼
-    ┌─────────┐  ┌─────────┐
-    │lark2gh  │  │gh2lark  │
-    └────┬────┘  └────┬────┘
-         │            │
-         └──────┬─────┘
-                │
-    ┌───────────▼───────────┐
-    │       finalize        │
-    └───────────┬───────────┘
-                │
-               END
+    Build the supervisor graph with injected dependencies.
+
+    The graph uses partial() to bind tool instances into agent nodes,
+    following Dependency Inversion — agents receive services at build time.
     """
-    
-    # Create the graph
-    workflow = StateGraph(AgentState)
-    
-    # Add nodes
-    workflow.add_node("load_input_files", load_input_files)
-    workflow.add_node("parse_with_llm", parse_with_llm)
-    workflow.add_node("load_existing_data", load_existing_data)
-    workflow.add_node("standardize_members", standardize_members)
-    workflow.add_node("align_todos", align_todos)
-    workflow.add_node("sync_lark_to_github", sync_lark_to_github)
-    workflow.add_node("sync_github_to_lark", sync_github_to_lark)
-    workflow.add_node("finalize", finalize)
-    
-    # Define the flow
-    workflow.set_entry_point("load_input_files")
-    
-    workflow.add_edge("load_input_files", "parse_with_llm")
-    workflow.add_edge("parse_with_llm", "load_existing_data")
-    workflow.add_edge("load_existing_data", "standardize_members")
-    workflow.add_edge("standardize_members", "align_todos")
-    
-    # Conditional routing based on sync direction
-    def route_sync(state: AgentState) -> Literal["sync_lark_to_github", "sync_github_to_lark"]:
-        direction = state.get("sync_direction", "bidirectional")
-        project = state.get("project", {})
-        
-        if project:
-            sync_config = project.get("sync", {})
-            direction = sync_config.get("direction", direction)
-        
-        if direction == "github_to_lark":
-            return "sync_github_to_lark"
-        else:
-            # For bidirectional or lark_to_github, start with lark_to_github
-            return "sync_lark_to_github"
-    
-    workflow.add_conditional_edges(
-        "align_todos",
-        route_sync,
+
+    # Instantiate tool collections (bound to services)
+    member_tools = MemberTools(db, lark_service=lark_service, github_service=github_service)
+    github_tools = GitHubTools(db, github_service=github_service, lark_service=lark_service)
+    lark_tools = LarkTools(db, lark_service=lark_service, github_service=github_service)
+    sync_tools = SyncTools(db, github_service=github_service, lark_service=lark_service)
+
+    # Bind tools into agent node functions via partial
+    bound_member = partial(member_agent_node, tools=member_tools)
+    bound_github = partial(github_agent_node, tools=github_tools)
+    bound_lark = partial(lark_agent_node, tools=lark_tools)
+    bound_sync = partial(sync_agent_node, tools=sync_tools)
+
+    # Build graph
+    graph = StateGraph(AgentState)
+
+    graph.add_node("parse_command", parse_command)
+    graph.add_node("member_agent", bound_member)
+    graph.add_node("github_agent", bound_github)
+    graph.add_node("lark_agent", bound_lark)
+    graph.add_node("sync_agent", bound_sync)
+    graph.add_node("ask_clarification", ask_clarification)
+    graph.add_node("format_response", format_response)
+
+    graph.set_entry_point("parse_command")
+
+    graph.add_conditional_edges(
+        "parse_command",
+        route_by_intent,
         {
-            "sync_lark_to_github": "sync_lark_to_github",
-            "sync_github_to_lark": "sync_github_to_lark",
-        }
+            "member_agent": "member_agent",
+            "github_agent": "github_agent",
+            "lark_agent": "lark_agent",
+            "sync_agent": "sync_agent",
+            "ask_clarification": "ask_clarification",
+        },
     )
-    
-    # After first sync, check if bidirectional
-    def route_after_lark_sync(state: AgentState) -> Literal["sync_github_to_lark", "finalize"]:
-        direction = state.get("sync_direction", "bidirectional")
-        project = state.get("project", {})
-        
-        if project:
-            sync_config = project.get("sync", {})
-            direction = sync_config.get("direction", direction)
-        
-        if direction == "bidirectional":
-            return "sync_github_to_lark"
-        else:
-            return "finalize"
-    
-    workflow.add_conditional_edges(
-        "sync_lark_to_github",
-        route_after_lark_sync,
-        {
-            "sync_github_to_lark": "sync_github_to_lark",
-            "finalize": "finalize",
-        }
-    )
-    
-    def route_after_github_sync(state: AgentState) -> Literal["sync_lark_to_github", "finalize"]:
-        direction = state.get("sync_direction", "bidirectional")
-        project = state.get("project", {})
-        
-        if project:
-            sync_config = project.get("sync", {})
-            direction = sync_config.get("direction", direction)
-        
-        # If we started with github_to_lark and it's bidirectional, now do lark_to_github
-        # But if we already did lark_to_github (came from that node), go to finalize
-        current_node = state.get("current_node", "")
-        
-        if direction == "bidirectional" and current_node == "sync_github_to_lark":
-            # Check if we already did lark sync (by checking synced_to_lark)
-            if not state.get("synced_to_lark"):
-                # We came directly here, need to sync back
-                return "sync_lark_to_github"
-        
-        return "finalize"
-    
-    workflow.add_conditional_edges(
-        "sync_github_to_lark",
-        route_after_github_sync,
-        {
-            "sync_lark_to_github": "sync_lark_to_github",
-            "finalize": "finalize",
-        }
-    )
-    
-    # Final edge
-    workflow.add_edge("finalize", END)
-    
-    return workflow
+
+    for node in ("member_agent", "github_agent", "lark_agent", "sync_agent", "ask_clarification"):
+        graph.add_edge(node, "format_response")
+
+    graph.add_edge("format_response", END)
+
+    return graph
 
 
-def compile_agent():
-    """Compile the agent graph."""
-    workflow = create_sync_agent()
-    return workflow.compile()
+def compile_graph(
+    db: Database,
+    github_service: Any = None,
+    lark_service: Any = None,
+):
+    """Build and compile the supervisor graph."""
+    graph = build_graph(db, github_service, lark_service)
+    return graph.compile()
 
 
-def run_agent(
-    input_path: str = None,
-    sync_direction: str = "bidirectional",
-) -> dict[str, Any]:
-    """
-    Run the sync agent.
-    
-    The agent loads markdown documents from input_path:
-    - *project*.md or *structure*.md -> project description
-    - *todo*.md or *task*.md -> fuzzy task list (LLM will parse)
-    - *team*.md or *member*.md -> team info (optional)
-    - config.yaml -> optional overrides
-    
-    Args:
-        input_path: Path to input folder (default: ./input)
-        sync_direction: 'github_to_lark', 'lark_to_github', or 'bidirectional'
-    
-    Returns:
-        Final agent state with sync results
-    """
-    app = compile_agent()
-    
+def run_command(
+    command: str,
+    db: Database,
+    github_service: Any = None,
+    lark_service: Any = None,
+) -> str:
+    """One-shot: run a single user command through the agent graph."""
+    app = compile_graph(db, github_service, lark_service)
     initial_state: AgentState = {
+        "user_command": command,
         "messages": [],
-        "sync_direction": sync_direction,  # type: ignore
     }
-    
-    if input_path:
-        initial_state["input_path"] = input_path
-    
-    # Run the graph
-    result = app.invoke(initial_state)
-    
-    return result
-
-
-if __name__ == "__main__":
-    print("Testing LangGraph agent...")
-    result = run_agent()
-    
-    print("\nMessages:")
-    for msg in result.get("messages", []):
-        print(f"  {msg}")
+    final_state = app.invoke(initial_state)
+    return final_state.get("result", "No result.")

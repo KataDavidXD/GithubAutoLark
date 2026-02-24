@@ -1,173 +1,144 @@
-"""
-Run the LangGraph Sync Agent
+#!/usr/bin/env python3
+"""Interactive CLI for the unified GitHub-Lark agent system.
 
-The agent parses fuzzy markdown documents using LLM and syncs to GitHub/Lark.
-
-Usage:
-    python scripts/run_agent.py
-    python scripts/run_agent.py --direction github_to_lark
-    python scripts/run_agent.py --input /path/to/input/folder
-
-Input folder structure:
-    input/
-    ├── *project*.md or *structure*.md  -> Project description
-    ├── *todo*.md or *task*.md          -> Fuzzy task list (LLM parses)
-    ├── *team*.md or *member*.md        -> Team info (optional)
-    └── config.yaml                     -> Optional config overrides
+Supports both interactive (REPL) and single-command modes.
 """
 
 from __future__ import annotations
 
 import argparse
 import sys
-from datetime import datetime
-from io import StringIO
 from pathlib import Path
 
-# Add parent to path for imports
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
-from src.config import get_demos_dir, get_repo_root
-from src.redact import redact_text
-
-
-class OutputCapture:
-    """Capture print output for saving to file."""
-    
-    def __init__(self):
-        self.buffer = StringIO()
-        self._stdout = sys.stdout
-    
-    def write(self, text: str) -> None:
-        self._stdout.write(text)
-        self.buffer.write(text)
-    
-    def flush(self) -> None:
-        self._stdout.flush()
-    
-    def get_output(self) -> str:
-        return self.buffer.getvalue()
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Run the GitHub-Lark sync agent")
-    parser.add_argument(
-        "--direction",
-        choices=["github_to_lark", "lark_to_github", "bidirectional"],
-        default="bidirectional",
-        help="Sync direction (default: bidirectional)",
+    parser = argparse.ArgumentParser(
+        description="Unified GitHub-Lark Agent System",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  %(prog)s                                 # Interactive mode
+  %(prog)s -c "Add member Alice alice@co.com as developer"
+  %(prog)s -c "Create issue 'Fix bug' label:bug"
+  %(prog)s -c "List tables"
+  %(prog)s -c "Sync status"
+        """,
     )
-    parser.add_argument(
-        "--input",
-        default=str(get_repo_root() / "input"),
-        help="Path to input folder containing markdown docs",
-    )
-    parser.add_argument(
-        "--save-output",
-        action="store_true",
-        help="Save output to demos folder",
-    )
-    
+    parser.add_argument("-c", "--command", type=str, help="Single command to execute")
+    parser.add_argument("--no-lark", action="store_true", help="Disable Lark service")
+    parser.add_argument("--no-github", action="store_true", help="Disable GitHub service")
     args = parser.parse_args()
-    
-    # Capture output if saving
-    capture = None
-    if args.save_output:
-        capture = OutputCapture()
-        sys.stdout = capture
-    
-    try:
-        run_demo(args)
-    finally:
-        if capture:
-            sys.stdout = capture._stdout
-            
-            # Save redacted output
-            output = capture.get_output()
-            redacted = redact_text(output)
-            
-            demos_dir = get_demos_dir()
-            demos_dir.mkdir(parents=True, exist_ok=True)
-            
-            output_file = demos_dir / f"agent_run_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-            with open(output_file, "w", encoding="utf-8") as f:
-                f.write(f"# Agent Run - {datetime.now().isoformat()}\n")
-                f.write("# Output is REDACTED for security\n\n")
-                f.write(redacted)
-            
-            print(f"\n[Output saved to {output_file}]")
+
+    db, github_svc, lark_svc = _init_services(
+        skip_lark=args.no_lark, skip_github=args.no_github
+    )
+
+    if args.command:
+        _run_single(args.command, db, github_svc, lark_svc)
+    else:
+        _run_interactive(db, github_svc, lark_svc)
 
 
-def run_demo(args):
-    print("=" * 60)
-    print("LANGGRAPH SYNC AGENT")
-    print("=" * 60)
-    print(f"Direction: {args.direction}")
-    print(f"Input folder: {args.input}")
+def _init_services(skip_lark: bool = False, skip_github: bool = False):
+    from src.db.database import Database
+
+    db = Database()
+    db.init()
+
+    github_svc = None
+    if not skip_github:
+        try:
+            from src.services.github_service import GitHubService
+            github_svc = GitHubService()
+        except Exception as e:
+            print(f"[warn] GitHub service unavailable: {e}")
+
+    lark_svc = None
+    if not skip_lark:
+        try:
+            from src.services.lark_service import LarkService
+            lark_svc = LarkService()
+            lark_svc.__enter__()
+        except Exception as e:
+            print(f"[warn] Lark service unavailable: {e}")
+
+    return db, github_svc, lark_svc
+
+
+def _run_single(command: str, db, github_svc, lark_svc):
+    from src.agent.graph import run_command
+    result = run_command(command, db=db, github_service=github_svc, lark_service=lark_svc)
+    print(result)
+
+
+def _run_interactive(db, github_svc, lark_svc):
+    from src.agent.graph import run_command
+
+    print("=" * 50)
+    print("  Unified GitHub-Lark Agent System")
+    print("  Type 'help' for commands, 'quit' to exit")
+    print("=" * 50)
     print()
-    print("This agent parses fuzzy markdown docs using LLM and syncs to GitHub/Lark.")
-    print()
-    
-    try:
-        from src.agent.graph import run_agent
-        
-        result = run_agent(
-            input_path=args.input,
-            sync_direction=args.direction,
+
+    while True:
+        try:
+            command = input("> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\nGoodbye.")
+            break
+
+        if not command:
+            continue
+        if command.lower() in ("quit", "exit", "q"):
+            print("Goodbye.")
+            break
+        if command.lower() == "help":
+            _print_help()
+            continue
+
+        result = run_command(
+            command, db=db, github_service=github_svc, lark_service=lark_svc
         )
-        
-        print("\n" + "-" * 40)
-        print("Agent Messages:")
-        print("-" * 40)
-        for msg in result.get("messages", []):
-            print(f"  {msg}")
-        
-        print("\n" + "-" * 40)
-        print("Results Summary:")
-        print("-" * 40)
-        
-        # Members
-        members_std = result.get("members_standardized", [])
-        print(f"\nStandardized Members ({len(members_std)}):")
-        for m in members_std:
-            print(f"  - {m.get('email')}: GitHub={m.get('github_username')}, Lark={m.get('lark_open_id', '')[:20]}...")
-        
-        # Todos aligned
-        todos_aligned = result.get("todos_aligned", [])
-        print(f"\nAligned Todos ({len(todos_aligned)}):")
-        for t in todos_aligned:
-            gh = f"#{t.get('github_issue_number')}" if t.get('github_issue_number') else "N/A"
-            lark = t.get('lark_record_id', 'N/A')[:12] + "..." if t.get('lark_record_id') else "N/A"
-            print(f"  - {t.get('title')[:40]}... -> GH: {gh}, Lark: {lark}")
-        
-        # Sync results
-        synced_gh = result.get("synced_to_github", [])
-        synced_lark = result.get("synced_to_lark", [])
-        errors = result.get("sync_errors", [])
-        
-        print(f"\nSync Results:")
-        print(f"  GitHub: {len(synced_gh)} synced")
-        print(f"  Lark: {len(synced_lark)} synced")
-        print(f"  Errors: {len(errors)}")
-        
-        if errors:
-            print("\nErrors:")
-            for err in errors:
-                print(f"  - {err}")
-        
-        print("\n" + "=" * 60)
-        print("AGENT RUN COMPLETE")
-        print("=" * 60)
-        
-    except ImportError as e:
-        print(f"\nError: LangGraph not installed. Run: pip install langgraph langchain-core")
-        print(f"Details: {e}")
-        sys.exit(1)
-    except Exception as e:
-        print(f"\nError running agent: {e}")
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
+        print(result)
+        print()
+
+
+def _print_help():
+    print("""
+Available commands:
+
+  Member Management:
+    add member <Name> <email> as <role>
+    show member <name or email>
+    update member <name> role to <role>
+    assign member <name> to table <table_name>
+    list members [by role <role>] [by team <team>]
+    show <name>'s work
+    remove member <name>
+
+  GitHub Issues:
+    create issue '<title>' [assigned to <name>] [label:<label>]
+    show issue #<number>
+    update issue #<number> [title/body/state/assignee]
+    close issue #<number>
+    list issues [by <assignee>] [state open/closed]
+    send issue #<number> to lark [table <name>]
+
+  Lark Tables:
+    create record '<title>' in table <name> [assigned to <name>]
+    show record <record_id> [in table <name>]
+    update record <record_id> [status/title/assignee]
+    list records [in table <name>] [by <assignee>] [status <status>]
+    list tables
+    send record <record_id> to github
+
+  Sync:
+    sync pending
+    sync status
+    retry failed
+""")
 
 
 if __name__ == "__main__":
