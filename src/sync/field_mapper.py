@@ -43,10 +43,6 @@ def github_issue_to_lark_fields(
     if issue_number:
         fields[fm.get("github_issue_field", "GitHub Issue")] = issue_number
 
-    sync_field = fm.get("last_sync_field", "Last Sync")
-    if sync_field:
-        fields[sync_field] = int(datetime.now(timezone.utc).timestamp() * 1000)
-
     return fields
 
 
@@ -118,9 +114,5 @@ def build_lark_record_fields(
         desc_field = fm.get("description_field", "Description")
         if desc_field:
             fields[desc_field] = body
-
-    sync_field = fm.get("last_sync_field", "Last Sync")
-    if sync_field:
-        fields[sync_field] = int(datetime.now(timezone.utc).timestamp() * 1000)
 
     return fields

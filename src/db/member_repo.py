@@ -126,3 +126,9 @@ class MemberRepository:
 
     def activate(self, member_id: str) -> Optional[Member]:
         return self.update(member_id, status=MemberStatus.ACTIVE.value)
+
+    def delete(self, member_id: str) -> bool:
+        """Hard delete a member record."""
+        with self._db.transaction() as conn:
+            cursor = conn.execute("DELETE FROM members WHERE member_id = ?", (member_id,))
+        return cursor.rowcount > 0

@@ -50,11 +50,18 @@ def github_agent_node(state: AgentState, tools: GitHubTools) -> dict[str, Any]:
                 )
 
         elif action == "close":
-            issue_number = entities.get("issue_number")
+            issue_number = entities.get("issue_number") or entities.get("issue_numbers")
             if issue_number:
                 result = tools.close_issue(issue_number)
             else:
                 result = "Specify an issue number to close."
+
+        elif action == "reopen":
+            issue_number = entities.get("issue_number") or entities.get("issue_numbers")
+            if issue_number:
+                result = tools.reopen_issue(issue_number)
+            else:
+                result = "Specify an issue number to reopen."
 
         elif action == "list":
             result = tools.list_issues(

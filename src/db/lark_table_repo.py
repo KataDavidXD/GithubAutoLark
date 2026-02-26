@@ -111,3 +111,11 @@ class LarkTableRepository:
                 "DELETE FROM lark_tables_registry WHERE registry_id = ?", (registry_id,)
             )
         return cursor.rowcount > 0
+
+    def delete_by_table_id(self, table_id: str) -> bool:
+        """Remove a table registration by its Lark table_id."""
+        with self._db.transaction() as conn:
+            cursor = conn.execute(
+                "DELETE FROM lark_tables_registry WHERE table_id = ?", (table_id,)
+            )
+        return cursor.rowcount > 0

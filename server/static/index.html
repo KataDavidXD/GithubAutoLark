@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GithubAutoLark - AI Task Manager</title>
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --primary-dark: #4338ca;
+            --bg: #f9fafb;
+            --card: #ffffff;
+            --text: #111827;
+            --text-muted: #6b7280;
+            --border: #e5e7eb;
+            --success: #10b981;
+            --error: #ef4444;
+        }
+        
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        header {
+            background: var(--card);
+            border-bottom: 1px solid var(--border);
+            padding: 16px 0;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        
+        header .container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--primary);
+        }
+        
+        .logo svg { width: 32px; height: 32px; }
+        
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            background: #ecfdf5;
+            color: var(--success);
+            border-radius: 20px;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+        
+        .status-badge.offline { background: #fef2f2; color: var(--error); }
+        
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 350px;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        @media (max-width: 900px) {
+            .main-grid { grid-template-columns: 1fr; }
+        }
+        
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        
+        .card-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+            font-weight: 600;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .card-body { padding: 20px; }
+        
+        /* Chat Interface */
+        .chat-container {
+            display: flex;
+            flex-direction: column;
+            height: 600px;
+        }
+        
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        
+        .message {
+            max-width: 85%;
+            padding: 12px 16px;
+            border-radius: 12px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        
+        .message.user {
+            align-self: flex-end;
+            background: var(--primary);
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+        
+        .message.assistant {
+            align-self: flex-start;
+            background: #f3f4f6;
+            border-bottom-left-radius: 4px;
+        }
+        
+        .message.system {
+            align-self: center;
+            background: #fef3c7;
+            color: #92400e;
+            font-size: 0.875rem;
+            padding: 8px 16px;
+        }
+        
+        .chat-input-area {
+            padding: 16px 20px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            gap: 12px;
+        }
+        
+        .chat-input-area input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 1rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        
+        .chat-input-area input:focus { border-color: var(--primary); }
+        
+        .btn {
+            padding: 12px 24px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        .btn:hover { background: var(--primary-dark); }
+        .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        
+        .btn-secondary {
+            background: white;
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+        
+        .btn-secondary:hover { background: #f3f4f6; }
+        
+        /* Quick Actions */
+        .quick-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+        
+        .quick-btn {
+            padding: 8px 14px;
+            background: #f3f4f6;
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            font-size: 0.875rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .quick-btn:hover {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+        
+        /* Sidebar */
+        .sidebar-section { margin-bottom: 20px; }
+        .sidebar-section:last-child { margin-bottom: 0; }
+        
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+        }
+        
+        .stat-card {
+            padding: 16px;
+            background: #f9fafb;
+            border-radius: 8px;
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--primary);
+        }
+        
+        .stat-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            margin-top: 4px;
+        }
+        
+        .list-item {
+            padding: 12px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .list-item:last-child { border-bottom: none; }
+        
+        .badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        
+        .badge-open { background: #dbeafe; color: #1d4ed8; }
+        .badge-closed { background: #dcfce7; color: #166534; }
+        
+        /* Loading spinner */
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid #e5e7eb;
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        
+        @keyframes spin { to { transform: rotate(360deg); } }
+        
+        .loading-message {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            background: #f3f4f6;
+            border-radius: 12px;
+            color: var(--text-muted);
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div class="logo">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/>
+                </svg>
+                GithubAutoLark
+            </div>
+            <div id="status-indicator" class="status-badge">
+                <span class="dot"></span>
+                <span>Connecting...</span>
+            </div>
+        </div>
+    </header>
+    
+    <div class="container">
+        <div class="main-grid">
+            <!-- Chat Panel -->
+            <div class="card chat-container">
+                <div class="card-header">
+                    <span>Chat with AI Assistant</span>
+                    <button class="btn btn-secondary" onclick="clearChat()" style="padding: 6px 12px; font-size: 0.875rem;">Clear</button>
+                </div>
+                
+                <div class="chat-messages" id="chat-messages">
+                    <div class="message system">
+                        Welcome! I can help you manage GitHub issues and Lark tasks. Try asking me to create issues, list tasks, or check on team members.
+                    </div>
+                </div>
+                
+                <div style="padding: 12px 20px; border-top: 1px solid var(--border);">
+                    <div style="margin-bottom: 8px; font-size: 0.75rem; color: var(--text-muted); font-weight: 500;">QUICK ACTIONS</div>
+                    <div class="quick-actions">
+                        <button class="quick-btn" onclick="sendQuick('list members')">List Members</button>
+                        <button class="quick-btn" onclick="sendQuick('fetch github members')">Fetch GitHub</button>
+                        <button class="quick-btn" onclick="sendQuick('fetch lark members')">Fetch Lark</button>
+                        <button class="quick-btn" onclick="sendQuick('list open issues')">Open Issues</button>
+                        <button class="quick-btn" onclick="sendQuick('list tables')">Lark Tables</button>
+                    </div>
+                    <div style="margin-top: 12px; margin-bottom: 8px; font-size: 0.75rem; color: var(--text-muted); font-weight: 500;">WORK QUERIES</div>
+                    <div class="quick-actions">
+                        <button class="quick-btn" onclick="askMemberWork()">What is [Name] doing?</button>
+                        <button class="quick-btn" onclick="sendQuick('show Yang Li\\'s work')">Yang Li's Work</button>
+                    </div>
+                    <div style="margin-top: 12px; margin-bottom: 8px; font-size: 0.75rem; color: var(--text-muted); font-weight: 500;">ACTIONS</div>
+                    <div class="quick-actions">
+                        <button class="quick-btn" onclick="askCreateIssue()">Create Issue</button>
+                        <button class="quick-btn" onclick="askLinkMembers()">Link Members</button>
+                        <button class="quick-btn" onclick="sendQuick('sync status')">Sync Status</button>
+                    </div>
+                </div>
+                
+                <div class="chat-input-area">
+                    <input type="text" id="chat-input" placeholder="Type your message..." onkeypress="handleKeyPress(event)">
+                    <button class="btn" onclick="sendMessage()" id="send-btn">Send</button>
+                </div>
+            </div>
+            
+            <!-- Sidebar -->
+            <div>
+                <div class="card sidebar-section">
+                    <div class="card-header">Quick Stats</div>
+                    <div class="card-body">
+                        <div class="stat-grid">
+                            <div class="stat-card">
+                                <div class="stat-value" id="stat-members">-</div>
+                                <div class="stat-label">Members</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value" id="stat-tasks">-</div>
+                                <div class="stat-label">Tasks</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value" id="stat-issues">-</div>
+                                <div class="stat-label">Issues</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value" id="stat-mappings">-</div>
+                                <div class="stat-label">Synced</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card sidebar-section">
+                    <div class="card-header">
+                        <span>Recent Issues</span>
+                        <button class="btn btn-secondary" onclick="refreshIssues()" style="padding: 4px 10px; font-size: 0.75rem;">Refresh</button>
+                    </div>
+                    <div id="recent-issues">
+                        <div class="list-item" style="color: var(--text-muted); justify-content: center;">Loading...</div>
+                    </div>
+                </div>
+                
+                <div class="card sidebar-section">
+                    <div class="card-header">Quick Links</div>
+                    <div class="card-body" style="display: flex; flex-direction: column; gap: 8px;">
+                        <a href="#" id="github-repo-link" target="_blank" class="quick-link" style="display: flex; align-items: center; gap: 8px; padding: 10px; background: #f3f4f6; border-radius: 8px; text-decoration: none; color: var(--text);">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+                            <span>GitHub Repository</span>
+                        </a>
+                        <a href="#" id="lark-bitable-link" target="_blank" class="quick-link" style="display: flex; align-items: center; gap: 8px; padding: 10px; background: #f3f4f6; border-radius: 8px; text-decoration: none; color: var(--text);">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="#3370ff"><rect width="24" height="24" rx="4" fill="#3370ff"/><path d="M7 8h10v2H7zM7 12h10v2H7zM7 16h6v2H7z" fill="white"/></svg>
+                            <span>Lark Bitable</span>
+                        </a>
+                    </div>
+                </div>
+                
+                <div class="card sidebar-section">
+                    <div class="card-header">Admin Actions</div>
+                    <div class="card-body" style="display: flex; flex-direction: column; gap: 8px;">
+                        <button class="btn" onclick="transferOwnerToAdmin()" style="background: #dc2626; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><polyline points="17 11 19 13 23 9"/></svg>
+                            Transfer to Yang Li
+                        </button>
+                        <button class="btn btn-secondary" onclick="syncAllMembers()" style="display: flex; align-items: center; justify-content: center; gap: 8px;">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 0 1-9 9m9-9a9 9 0 0 0-9-9m9 9H3m9 9a9 9 0 0 1-9-9m9 9c1.66 0 3-4 3-9s-1.34-9-3-9m0 18c-1.66 0-3-4-3-9s1.34-9 3-9"/></svg>
+                            Sync All Members
+                        </button>
+                        <button class="btn btn-secondary" onclick="listCollaborators()" style="display: flex; align-items: center; justify-content: center; gap: 8px;">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                            List Collaborators
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="card sidebar-section">
+                    <div class="card-header">Example Commands</div>
+                    <div class="card-body" style="font-size: 0.875rem; color: var(--text-muted); line-height: 1.8;">
+                        <p><strong>Create:</strong> "Create issue: Fix login bug"</p>
+                        <p><strong>Assign:</strong> "Assign issue #5 to Alice"</p>
+                        <p><strong>Query:</strong> "What is Alice working on?"</p>
+                        <p><strong>Sync:</strong> "Sync issue #3 to Lark"</p>
+                        <p><strong>Status:</strong> "Show progress on MAS Engine"</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const API_BASE = window.location.origin;
+        const chatMessages = document.getElementById('chat-messages');
+        const chatInput = document.getElementById('chat-input');
+        const sendBtn = document.getElementById('send-btn');
+        const statusIndicator = document.getElementById('status-indicator');
+        
+        async function checkStatus() {
+            try {
+                const res = await fetch(`${API_BASE}/api/status`);
+                const data = await res.json();
+                statusIndicator.innerHTML = '<span class="dot"></span><span>Online</span>';
+                statusIndicator.classList.remove('offline');
+                return true;
+            } catch (e) {
+                statusIndicator.innerHTML = '<span class="dot"></span><span>Offline</span>';
+                statusIndicator.classList.add('offline');
+                return false;
+            }
+        }
+        
+        async function loadStats() {
+            try {
+                const [members, tasks, issues, mappings] = await Promise.all([
+                    fetch(`${API_BASE}/api/members`).then(r => r.json()).catch(() => ({ count: 0 })),
+                    fetch(`${API_BASE}/api/tasks`).then(r => r.json()).catch(() => ({ count: 0 })),
+                    fetch(`${API_BASE}/api/issues`).then(r => r.json()).catch(() => ({ count: 0 })),
+                    fetch(`${API_BASE}/api/mappings`).then(r => r.json()).catch(() => ({ count: 0 })),
+                ]);
+                
+                document.getElementById('stat-members').textContent = members.count || 0;
+                document.getElementById('stat-tasks').textContent = tasks.count || 0;
+                document.getElementById('stat-issues').textContent = issues.count || 0;
+                document.getElementById('stat-mappings').textContent = mappings.count || 0;
+            } catch (e) {
+                console.error('Failed to load stats:', e);
+            }
+        }
+        
+        async function refreshIssues() {
+            const container = document.getElementById('recent-issues');
+            container.innerHTML = '<div class="list-item" style="color: var(--text-muted); justify-content: center;">Loading...</div>';
+            
+            try {
+                const res = await fetch(`${API_BASE}/api/issues?state=open`);
+                const data = await res.json();
+                
+                if (data.issues && data.issues.length > 0) {
+                    container.innerHTML = data.issues.slice(0, 5).map(issue => `
+                        <div class="list-item">
+                            <span>#${issue.number} ${issue.title.substring(0, 25)}${issue.title.length > 25 ? '...' : ''}</span>
+                            <span class="badge badge-${issue.state}">${issue.state}</span>
+                        </div>
+                    `).join('');
+                } else {
+                    container.innerHTML = '<div class="list-item" style="color: var(--text-muted); justify-content: center;">No open issues</div>';
+                }
+            } catch (e) {
+                container.innerHTML = '<div class="list-item" style="color: var(--error); justify-content: center;">Failed to load</div>';
+            }
+        }
+        
+        function addMessage(content, type = 'assistant') {
+            const msg = document.createElement('div');
+            msg.className = `message ${type}`;
+            msg.textContent = content;
+            chatMessages.appendChild(msg);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+        
+        function addLoadingMessage() {
+            const loader = document.createElement('div');
+            loader.className = 'loading-message';
+            loader.id = 'loading-indicator';
+            loader.innerHTML = '<div class="spinner"></div><span>Thinking...</span>';
+            chatMessages.appendChild(loader);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+        
+        function removeLoadingMessage() {
+            const loader = document.getElementById('loading-indicator');
+            if (loader) loader.remove();
+        }
+        
+        async function sendMessage() {
+            const message = chatInput.value.trim();
+            if (!message) return;
+            
+            addMessage(message, 'user');
+            chatInput.value = '';
+            sendBtn.disabled = true;
+            addLoadingMessage();
+            
+            try {
+                const res = await fetch(`${API_BASE}/api/chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message }),
+                });
+                
+                removeLoadingMessage();
+                
+                if (res.ok) {
+                    const data = await res.json();
+                    addMessage(data.response, 'assistant');
+                    loadStats();
+                    refreshIssues();
+                } else {
+                    const error = await res.json();
+                    addMessage(`Error: ${error.detail || 'Unknown error'}`, 'system');
+                }
+            } catch (e) {
+                removeLoadingMessage();
+                addMessage(`Connection error: ${e.message}`, 'system');
+            }
+            
+            sendBtn.disabled = false;
+            chatInput.focus();
+        }
+        
+        function sendQuick(text) {
+            chatInput.value = text;
+            sendMessage();
+        }
+        
+        function askMemberWork() {
+            const name = prompt("Enter member name:", "Yang Li");
+            if (name) {
+                sendQuick(`what is ${name} doing now?`);
+            }
+        }
+        
+        function askCreateIssue() {
+            const title = prompt("Enter issue title:", "");
+            if (title) {
+                const assignee = prompt("Assignee (optional):", "");
+                if (assignee) {
+                    sendQuick(`create issue: ${title}, assign to ${assignee}`);
+                } else {
+                    sendQuick(`create issue: ${title}`);
+                }
+            }
+        }
+        
+        function askLinkMembers() {
+            const github = prompt("GitHub username:", "");
+            if (github) {
+                const larkName = prompt("Lark member name:", "");
+                if (larkName) {
+                    sendQuick(`link ${github} to ${larkName}`);
+                }
+            }
+        }
+        
+        function handleKeyPress(e) {
+            if (e.key === 'Enter' && !sendBtn.disabled) {
+                sendMessage();
+            }
+        }
+        
+        function clearChat() {
+            chatMessages.innerHTML = `
+                <div class="message system">
+                    Welcome! I can help you manage GitHub issues and Lark tasks. Try asking me to create issues, list tasks, or check on team members.
+                </div>
+            `;
+        }
+        
+        async function transferOwnerToAdmin() {
+            if (!confirm('Transfer Lark Bitable ownership to Yang Li (Admin)?')) {
+                return;
+            }
+            
+            addMessage('Transfer Lark permission to Yang Li', 'user');
+            addLoadingMessage();
+            
+            try {
+                const res = await fetch(`${API_BASE}/api/admin/transfer-owner`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                });
+                
+                removeLoadingMessage();
+                
+                if (res.ok) {
+                    const data = await res.json();
+                    addMessage(data.message || 'Transfer completed', 'assistant');
+                } else {
+                    const error = await res.json();
+                    addMessage(`Error: ${error.detail || 'Transfer failed'}`, 'system');
+                }
+            } catch (e) {
+                removeLoadingMessage();
+                addMessage(`Connection error: ${e.message}`, 'system');
+            }
+        }
+        
+        async function syncAllMembers() {
+            addMessage('Sync all members from GitHub and Lark', 'user');
+            addLoadingMessage();
+            
+            try {
+                const res = await fetch(`${API_BASE}/api/chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: 'sync all members from github and lark' }),
+                });
+                
+                removeLoadingMessage();
+                
+                if (res.ok) {
+                    const data = await res.json();
+                    addMessage(data.response, 'assistant');
+                    loadStats();
+                } else {
+                    const error = await res.json();
+                    addMessage(`Error: ${error.detail || 'Sync failed'}`, 'system');
+                }
+            } catch (e) {
+                removeLoadingMessage();
+                addMessage(`Connection error: ${e.message}`, 'system');
+            }
+        }
+        
+        async function listCollaborators() {
+            addMessage('List Lark Bitable collaborators', 'user');
+            addLoadingMessage();
+            
+            try {
+                const res = await fetch(`${API_BASE}/api/chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: 'list lark collaborators' }),
+                });
+                
+                removeLoadingMessage();
+                
+                if (res.ok) {
+                    const data = await res.json();
+                    addMessage(data.response, 'assistant');
+                } else {
+                    const error = await res.json();
+                    addMessage(`Error: ${error.detail || 'Failed to list'}`, 'system');
+                }
+            } catch (e) {
+                removeLoadingMessage();
+                addMessage(`Connection error: ${e.message}`, 'system');
+            }
+        }
+        
+        async function loadLinks() {
+            try {
+                const res = await fetch(`${API_BASE}/api/status`);
+                const data = await res.json();
+                
+                const githubLink = document.getElementById('github-repo-link');
+                const larkLink = document.getElementById('lark-bitable-link');
+                
+                if (data.links && data.links.github_repo) {
+                    githubLink.href = data.links.github_repo;
+                    githubLink.querySelector('span').textContent = data.links.github_repo_name || 'GitHub Repository';
+                }
+                if (data.links && data.links.lark_bitable) {
+                    larkLink.href = data.links.lark_bitable;
+                    larkLink.querySelector('span').textContent = data.links.lark_table_name || 'Lark Bitable';
+                }
+            } catch (e) {
+                console.error('Failed to load links:', e);
+            }
+        }
+        
+        // Initialize
+        checkStatus().then(() => {
+            loadStats();
+            refreshIssues();
+            loadLinks();
+        });
+        
+        // Periodic status check
+        setInterval(checkStatus, 30000);
+    </script>
+</body>
+</html>

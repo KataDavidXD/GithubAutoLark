@@ -148,3 +148,44 @@ class GitHubService:
         )
         resp.raise_for_status()
         return resp.json().get("items", [])
+
+    # -- Organization / Collaborator management --------------------------------
+
+    def list_repo_collaborators(self, per_page: int = 100) -> list[dict[str, Any]]:
+        """List all collaborators of the repository."""
+        resp = requests.get(
+            self._url("/collaborators"),
+            headers=self._headers,
+            params={"per_page": per_page},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    def list_org_members(self, org: Optional[str] = None, per_page: int = 100) -> list[dict[str, Any]]:
+        """List members of an organization.
+        
+        Note: Requires organization membership or admin access.
+        """
+        org_name = org or self.config.owner
+        url = f"https://api.github.com/orgs/{org_name}/members"
+        resp = requests.get(
+            url,
+            headers=self._headers,
+            params={"per_page": per_page},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    def get_user(self, username: str) -> dict[str, Any]:
+        """Get details of a GitHub user."""
+        url = f"https://api.github.com/users/{username}"
+        resp = requests.get(url, headers=self._headers)
+        resp.raise_for_status()
+        return resp.json()
+
+    def get_authenticated_user(self) -> dict[str, Any]:
+        """Get the authenticated user's info."""
+        url = "https://api.github.com/user"
+        resp = requests.get(url, headers=self._headers)
+        resp.raise_for_status()
+        return resp.json()

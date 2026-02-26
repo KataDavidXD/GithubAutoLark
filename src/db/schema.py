@@ -43,12 +43,15 @@ CREATE TABLE IF NOT EXISTS tasks (
     assignee_member_id  TEXT REFERENCES members(member_id),
     labels              TEXT DEFAULT '[]',
     target_table        TEXT,
+    due_date            TEXT,
+    progress            INTEGER DEFAULT 0 CHECK(progress >= 0 AND progress <= 100),
     created_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
     updated_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_tasks_assignee ON tasks(assignee_member_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+CREATE INDEX IF NOT EXISTS idx_tasks_due_date ON tasks(due_date);
 
 -- ==========================================================================
 -- Mapping Table (multi-table + multi-repo ready)

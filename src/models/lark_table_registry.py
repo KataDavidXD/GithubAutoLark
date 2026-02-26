@@ -15,7 +15,6 @@ DEFAULT_FIELD_MAPPING: dict[str, str] = {
     "status_field": "Status",
     "assignee_field": "Assignee",
     "github_issue_field": "GitHub Issue",
-    "last_sync_field": "Last Sync",
     "priority_field": "Priority",
     "description_field": "Description",
 }

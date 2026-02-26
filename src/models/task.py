@@ -43,6 +43,8 @@ class Task:
     assignee_member_id: Optional[str] = None
     labels: list[str] = field(default_factory=list)
     target_table: Optional[str] = None
+    due_date: Optional[str] = None
+    progress: int = 0
     created_at: str = field(
         default_factory=lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     )
@@ -73,6 +75,8 @@ class Task:
             "assignee_member_id": self.assignee_member_id,
             "labels": self.labels_json(),
             "target_table": self.target_table,
+            "due_date": self.due_date,
+            "progress": self.progress,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
         }
@@ -89,6 +93,8 @@ class Task:
             assignee_member_id=row.get("assignee_member_id"),
             labels=cls.parse_labels(row.get("labels")),
             target_table=row.get("target_table"),
+            due_date=row.get("due_date"),
+            progress=row.get("progress", 0),
             created_at=row.get("created_at", ""),
             updated_at=row.get("updated_at", ""),
         )

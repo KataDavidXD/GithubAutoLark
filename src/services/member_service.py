@@ -37,12 +37,19 @@ class MemberWorkSummary:
         for iss in self.github_issues[:10]:
             state = iss.get("state", "?")
             lines.append(f"    #{iss.get('number')}: {iss.get('title', '')} [{state}]")
-        lines.append(f"  Lark records: {len(self.lark_records)}")
+        lines.append(f"  Lark tasks: {len(self.lark_records)}")
         for rec in self.lark_records[:10]:
-            rid = rec.get("record_id", "?")
             fields = rec.get("fields", {})
-            title = fields.get("Task Name", fields.get("title", "?"))
-            lines.append(f"    {rid[:12]}: {title}")
+            raw_title = fields.get("Task Name", fields.get("Name", fields.get("title", "?")))
+            # Lark text fields can be [{"text": "...", "type": "text"}] or plain strings
+            if isinstance(raw_title, list) and raw_title:
+                title = raw_title[0].get("text", str(raw_title[0])) if isinstance(raw_title[0], dict) else str(raw_title[0])
+            else:
+                title = str(raw_title)
+            status = fields.get("Status", "?")
+            table_name = rec.get("_table_name", "")
+            table_prefix = f"[{table_name}] " if table_name else ""
+            lines.append(f"    {table_prefix}{title} [{status}]")
         lines.append(f"  Local tasks: {len(self.local_tasks)}")
         return "\n".join(lines)
 
@@ -173,8 +180,17 @@ class MemberService:
 
     # -- Work view -------------------------------------------------------------
 
+    # Common Lark Person/Assignee field names across different table schemas
+    _ASSIGNEE_FIELD_CANDIDATES = ("Assignee", "assignee", "负责人", "Owner", "Person")
+
     def get_member_work(self, identifier: str) -> Optional[MemberWorkSummary]:
-        """Aggregate a member's work across GitHub and Lark."""
+        """Aggregate a member's work across GitHub and Lark.
+
+        For Lark, queries the **live API** to discover ALL tables in the
+        Bitable app, then searches each one for records assigned to this
+        member.  This guarantees a complete, real-time answer regardless
+        of whether the table was created by our system or the Lark UI.
+        """
         member = self.get_member(identifier)
         if not member:
             return None
@@ -185,21 +201,12 @@ class MemberService:
                 github_issues = self._github.list_issues_by_assignee(
                     member.github_username, state="all"
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"[MemberService] GitHub query failed: {e}")
 
         lark_records: list[dict[str, Any]] = []
         if self._lark and member.lark_open_id:
-            for table_assign in member.lark_tables:
-                try:
-                    records = self._lark.search_records_by_assignee(
-                        member.lark_open_id,
-                        app_token=table_assign.app_token,
-                        table_id=table_assign.table_id,
-                    )
-                    lark_records.extend(records)
-                except Exception:
-                    pass
+            lark_records = self._search_all_lark_tables(member.lark_open_id)
 
         local_tasks = [
             t.to_dict() for t in self._task_repo.get_by_assignee(member.member_id)
@@ -211,6 +218,57 @@ class MemberService:
             lark_records=lark_records,
             local_tasks=local_tasks,
         )
+
+    def _search_all_lark_tables(self, open_id: str) -> list[dict[str, Any]]:
+        """Discover ALL tables from the live Lark API and search each one."""
+        import os
+        app_token = os.getenv("LARK_APP_TOKEN")
+        if not app_token:
+            return []
+
+        try:
+            live_tables = self._lark.list_tables(app_token)
+        except Exception as e:
+            print(f"[MemberService] Failed to list Lark tables: {e}")
+            return []
+
+        # Build a lookup from local registry for known field mappings
+        registered = {cfg.table_id: cfg for cfg in self._table_repo.list_all()}
+
+        results: list[dict[str, Any]] = []
+        for tbl in live_tables:
+            table_id = tbl.get("table_id", "")
+            table_name = tbl.get("name", table_id)
+
+            # Determine which field name to use for the Assignee filter
+            cfg = registered.get(table_id)
+            if cfg:
+                candidates = [cfg.field_mapping.get("assignee_field", "Assignee")]
+            else:
+                candidates = list(self._ASSIGNEE_FIELD_CANDIDATES)
+
+            for field_name in candidates:
+                try:
+                    records = self._lark.search_records_by_assignee(
+                        open_id,
+                        app_token=app_token,
+                        table_id=table_id,
+                        assignee_field=field_name,
+                    )
+                    for rec in records:
+                        rec["_table_name"] = table_name
+                    results.extend(records)
+                    break  # found the right field name, stop trying
+                except Exception as e:
+                    err = str(e)
+                    # Field doesn't exist or isn't the right type — try next
+                    if any(k in err for k in ("FieldNameNotFound", "1254036", "InvalidFilter", "1254018")):
+                        continue
+                    # Any other error means the table itself is broken; skip.
+                    print(f"[MemberService] Lark search '{table_name}' field='{field_name}': {err}")
+                    break
+
+        return results
 
     # -- Resolve Lark ID (batch) -----------------------------------------------
 

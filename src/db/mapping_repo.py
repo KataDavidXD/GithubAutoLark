@@ -64,6 +64,19 @@ class MappingRepository:
         )
         return Mapping.from_row(row) if row else None
 
+    def list_all(self, sync_status: Optional[SyncStatus] = None) -> list[Mapping]:
+        """List all mappings with optional status filter."""
+        if sync_status:
+            rows = self._db.fetchall(
+                "SELECT * FROM mappings WHERE sync_status = ? ORDER BY created_at DESC",
+                (sync_status.value,),
+            )
+        else:
+            rows = self._db.fetchall(
+                "SELECT * FROM mappings ORDER BY created_at DESC"
+            )
+        return [Mapping.from_row(r) for r in rows]
+
     # -- Update ----------------------------------------------------------------
 
     def update(self, mapping_id: str, **fields: Any) -> Optional[Mapping]:

@@ -18,9 +18,14 @@ class Database:
     ``transaction()``, which commits on success and rolls back on failure.
     """
 
-    def __init__(self, path: Optional[Path] = None):
+    def __init__(self, path: Optional[Path | str] = None):
         from src.config import get_db_path
-        self.path: Path = path or get_db_path()
+        if path is None:
+            self.path: Path = get_db_path()
+        elif isinstance(path, str):
+            self.path = Path(path)
+        else:
+            self.path = path
         self._conn: Optional[sqlite3.Connection] = None
 
     # -- connection lifecycle --------------------------------------------------

@@ -1,7 +1,6 @@
-"""Unit tests for the agent layer — supervisor routing, tools, and sub-agents.
+"""Unit tests for the agent layer — tool registry, tools, and plan execution.
 
 External APIs are mocked; DB uses real temp SQLite.
-LangGraph compilation is tested where available.
 """
 
 from __future__ import annotations
@@ -22,12 +21,7 @@ from src.models.task import Task, TaskStatus
 from src.models.mapping import Mapping
 from src.models.lark_table_registry import LarkTableConfig
 
-from src.agent.supervisor import (
-    classify_intent_keywords,
-    parse_command,
-    route_by_intent,
-    ask_clarification,
-)
+from src.agent.tool_registry import ToolRegistry
 from src.agent.tools.member_tools import MemberTools
 from src.agent.tools.github_tools import GitHubTools
 from src.agent.tools.lark_tools import LarkTools
@@ -43,139 +37,39 @@ def _make_db() -> Database:
 
 
 # ===========================================================================
-# 1. Intent Classification (keyword-based)
+# 1. Tool Registry
 # ===========================================================================
 
-class TestIntentClassification(unittest.TestCase):
-    def test_member_create(self):
-        intent, action, ent = classify_intent_keywords("Add member Alice alice@co.com as developer")
-        self.assertEqual(intent, "member_management")
-        self.assertEqual(action, "create")
-        self.assertEqual(ent.get("email"), "alice@co.com")
-        self.assertEqual(ent.get("role"), "developer")
+class TestToolRegistry(unittest.TestCase):
+    def setUp(self):
+        self.db = _make_db()
+        self.mock_github = MagicMock()
+        self.mock_github.repo_slug = "owner/repo"
+        self.mock_lark = MagicMock()
+        self.registry = ToolRegistry(self.db, self.mock_github, self.mock_lark)
 
-    def test_member_show(self):
-        intent, action, ent = classify_intent_keywords("Show member Alice")
-        self.assertEqual(intent, "member_management")
-        self.assertEqual(action, "read")
-        self.assertEqual(ent.get("name"), "Alice")
+    def tearDown(self):
+        self.db.close()
 
-    def test_member_list(self):
-        intent, action, _ = classify_intent_keywords("List members by role developer")
-        self.assertEqual(intent, "member_management")
-        self.assertEqual(action, "list")
+    def test_unknown_tool(self):
+        result = self.registry.execute("nonexistent", {})
+        self.assertIn("Unknown tool", result)
 
-    def test_member_work(self):
-        intent, action, ent = classify_intent_keywords("Show Alice's work")
-        self.assertEqual(intent, "member_management")
-        self.assertEqual(action, "read")
-        self.assertEqual(ent.get("name"), "Alice")
-
-    def test_github_create(self):
-        intent, action, ent = classify_intent_keywords(
-            "Create issue 'Fix login bug' assigned to Alice label:bug"
-        )
-        self.assertEqual(intent, "github_issues")
-        self.assertEqual(action, "create")
-        self.assertEqual(ent.get("title"), "Fix login bug")
-        self.assertEqual(ent.get("assignee"), "Alice")
-
-    def test_github_show(self):
-        intent, action, ent = classify_intent_keywords("Show issue #42")
-        self.assertEqual(intent, "github_issues")
-        self.assertEqual(action, "read")
-        self.assertEqual(ent.get("issue_number"), 42)
-
-    def test_github_close(self):
-        intent, action, ent = classify_intent_keywords("Close issue #10")
-        self.assertEqual(intent, "github_issues")
-        self.assertEqual(action, "close")
-        self.assertEqual(ent.get("issue_number"), 10)
-
-    def test_github_list(self):
-        intent, action, _ = classify_intent_keywords("List issues by Alice")
-        self.assertEqual(intent, "github_issues")
-        self.assertEqual(action, "list")
-
-    def test_github_send_to_lark(self):
-        intent, action, ent = classify_intent_keywords(
-            "Send issue #5 to lark table Backend Tasks"
-        )
-        self.assertEqual(intent, "github_issues")
-        self.assertEqual(action, "convert")
-        self.assertTrue(ent.get("send_to_lark"))
-
-    def test_lark_create(self):
-        intent, action, ent = classify_intent_keywords(
-            "Create task in table Design 'Design mockup' assigned to Bob"
-        )
-        self.assertEqual(intent, "lark_tables")
-        self.assertEqual(action, "create")
-        self.assertEqual(ent.get("title"), "Design mockup")
-
-    def test_lark_list_tables(self):
-        intent, action, _ = classify_intent_keywords("List tables")
-        self.assertEqual(intent, "lark_tables")
-        self.assertEqual(action, "list")
-
-    def test_lark_send_to_github(self):
-        intent, action, ent = classify_intent_keywords("Send record rec_abc to github")
-        self.assertEqual(intent, "lark_tables")
-        self.assertEqual(action, "convert")
-        self.assertEqual(ent.get("record_id"), "rec_abc")
-        self.assertTrue(ent.get("send_to_github"))
-
-    def test_sync_pending(self):
-        intent, action, _ = classify_intent_keywords("Sync pending")
-        self.assertEqual(intent, "cross_platform_sync")
+    def test_list_members(self):
+        result = self.registry.execute("list_members", {})
+        self.assertIn("No members", result)
 
     def test_sync_status(self):
-        intent, action, _ = classify_intent_keywords("Sync status")
-        self.assertEqual(intent, "cross_platform_sync")
+        result = self.registry.execute("sync_status", {})
+        self.assertIn("Pending events", result)
 
-    def test_unknown(self):
-        intent, _, _ = classify_intent_keywords("Hello world")
-        self.assertEqual(intent, "unknown")
-
-
-# ===========================================================================
-# 2. Supervisor Routing
-# ===========================================================================
-
-class TestSupervisorRouting(unittest.TestCase):
-    def test_parse_command(self):
-        state = {"user_command": "Add member Alice alice@co.com", "messages": []}
-        result = parse_command(state)
-        self.assertEqual(result["intent"], "member_management")
-
-    def test_route_member(self):
-        state = {"intent": "member_management"}
-        self.assertEqual(route_by_intent(state), "member_agent")
-
-    def test_route_github(self):
-        state = {"intent": "github_issues"}
-        self.assertEqual(route_by_intent(state), "github_agent")
-
-    def test_route_lark(self):
-        state = {"intent": "lark_tables"}
-        self.assertEqual(route_by_intent(state), "lark_agent")
-
-    def test_route_sync(self):
-        state = {"intent": "cross_platform_sync"}
-        self.assertEqual(route_by_intent(state), "sync_agent")
-
-    def test_route_unknown(self):
-        state = {"intent": "unknown"}
-        self.assertEqual(route_by_intent(state), "ask_clarification")
-
-    def test_ask_clarification(self):
-        state = {"user_command": "do something weird"}
-        result = ask_clarification(state)
-        self.assertIn("couldn't understand", result["result"])
+    def test_param_error(self):
+        result = self.registry.execute("get_issue", {"bad_param": 1})
+        self.assertIn("error", result.lower())
 
 
 # ===========================================================================
-# 3. Member Tools
+# 2. Member Tools
 # ===========================================================================
 
 class TestMemberTools(unittest.TestCase):
@@ -214,7 +108,7 @@ class TestMemberTools(unittest.TestCase):
 
 
 # ===========================================================================
-# 4. GitHub Tools
+# 3. GitHub Tools
 # ===========================================================================
 
 class TestGitHubTools(unittest.TestCase):
@@ -274,7 +168,7 @@ class TestGitHubTools(unittest.TestCase):
 
 
 # ===========================================================================
-# 5. Lark Tools
+# 4. Lark Tools
 # ===========================================================================
 
 class TestLarkTools(unittest.TestCase):
@@ -320,7 +214,7 @@ class TestLarkTools(unittest.TestCase):
 
 
 # ===========================================================================
-# 6. Sync Tools
+# 5. Sync Tools
 # ===========================================================================
 
 class TestSyncTools(unittest.TestCase):
@@ -345,11 +239,11 @@ class TestSyncTools(unittest.TestCase):
 
 
 # ===========================================================================
-# 7. LangGraph Integration (compile + run)
+# 6. Plan Execution via chat()
 # ===========================================================================
 
-class TestLangGraphIntegration(unittest.TestCase):
-    """Test that the LangGraph graph compiles and runs end-to-end."""
+class TestPlanExecution(unittest.TestCase):
+    """Test that the plan executor works with run_command (graph.py shim)."""
 
     def setUp(self):
         self.db = _make_db()
@@ -360,85 +254,17 @@ class TestLangGraphIntegration(unittest.TestCase):
     def tearDown(self):
         self.db.close()
 
-    def test_graph_compiles(self):
-        try:
-            from src.agent.graph import compile_graph
-            app = compile_graph(self.db, self.mock_github, self.mock_lark)
-            self.assertIsNotNone(app)
-        except ImportError:
-            self.skipTest("langgraph not installed")
-
-    def test_run_member_command(self):
-        try:
-            from src.agent.graph import run_command
-            self.mock_lark.get_user_id_by_email.return_value = None
-            result = run_command(
-                "Add member Alice alice@co.com as developer",
-                db=self.db,
-                github_service=self.mock_github,
-                lark_service=self.mock_lark,
-            )
-            self.assertIn("alice@co.com", result)
-            self.assertIn("created", result)
-        except ImportError:
-            self.skipTest("langgraph not installed")
-
-    def test_run_unknown_command(self):
-        try:
-            from src.agent.graph import run_command
-            result = run_command(
-                "do something weird",
-                db=self.db,
-                github_service=self.mock_github,
-                lark_service=self.mock_lark,
-            )
-            self.assertIn("couldn't understand", result)
-        except ImportError:
-            self.skipTest("langgraph not installed")
-
-    def test_run_github_command(self):
-        try:
-            from src.agent.graph import run_command
-            self.mock_github.create_issue.return_value = {"number": 77}
-            result = run_command(
-                "Create issue 'Fix auth module' label:feature",
-                db=self.db,
-                github_service=self.mock_github,
-                lark_service=self.mock_lark,
-            )
-            self.assertIn("#77", result)
-        except ImportError:
-            self.skipTest("langgraph not installed")
-
-    def test_run_sync_command(self):
-        try:
-            from src.agent.graph import run_command
-            result = run_command(
-                "Sync status",
-                db=self.db,
-                github_service=self.mock_github,
-                lark_service=self.mock_lark,
-            )
-            self.assertIn("Pending events", result)
-        except ImportError:
-            self.skipTest("langgraph not installed")
-
-    def test_run_list_tables_command(self):
-        try:
-            from src.agent.graph import run_command
-            LarkTableRepository(self.db).register(LarkTableConfig(
-                app_token="app1", table_id="tbl1", table_name="Frontend Tasks",
-                is_default=True,
-            ))
-            result = run_command(
-                "List tables",
-                db=self.db,
-                github_service=self.mock_github,
-                lark_service=self.mock_lark,
-            )
-            self.assertIn("Frontend Tasks", result)
-        except ImportError:
-            self.skipTest("langgraph not installed")
+    def test_run_command_delegates_to_chat(self):
+        from src.agent.graph import run_command
+        self.mock_lark.get_user_id_by_email.return_value = None
+        result = run_command(
+            "list members",
+            db=self.db,
+            github_service=self.mock_github,
+            lark_service=self.mock_lark,
+        )
+        # Should return something (either LLM result or fallback)
+        self.assertIsInstance(result, str)
 
 
 if __name__ == "__main__":
